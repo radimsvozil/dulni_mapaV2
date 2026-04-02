@@ -232,7 +232,7 @@ function buildGlobe(){
     .backgroundImageUrl("https://unpkg.com/three-globe/example/img/night-sky.png")
     .pointsData(data).pointLat("lat").pointLng("lng").pointColor("color")
     .pointRadius(function(d){return pointRadius(d);})
-    .pointAltitude(0.015).pointResolution(12)
+    .pointAltitude(0.015).pointsMerge(true).pointResolution(6)
     .pointLabel(function(d){
       return '<div style="background:rgba(6,13,26,0.95);border:1.5px solid '+d.color+';border-radius:8px;padding:10px 14px;font-family:sans-serif;color:#c8deff;min-width:200px;max-width:280px;line-height:1.7">'
         +'<div style="font-size:14px;font-weight:600;color:'+d.color+'">'+(d.name||"")+'</div>'
