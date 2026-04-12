@@ -4,10 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Světová mapa dolů</title>
+<link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060d1a;font-family:sans-serif;color:#c8deff;height:100vh;overflow:hidden}
-#globe-container{width:100vw;height:100vh}
+#cesiumContainer{width:100vw;height:100vh}
 .ui-btn{position:absolute;width:42px;height:42px;border-radius:50%;background:rgba(6,13,26,0.88);border:0.5px solid rgba(100,160,255,0.3);color:#88bbff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:100}
 .ui-btn:hover{background:rgba(100,160,255,0.15)}
 #btn-db{top:16px;right:16px}
@@ -87,11 +88,19 @@ td input:focus{background:rgba(100,160,255,0.1)}
 #drop-zone{border:1.5px dashed rgba(100,160,255,0.3);border-radius:10px;padding:16px;text-align:center;color:rgba(200,220,255,0.5);font-size:13px;cursor:pointer;margin:8px 16px}
 #file-input{display:none}
 #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:16px;color:rgba(200,220,255,0.6);z-index:50;text-align:center;background:rgba(6,13,26,0.9);padding:20px 40px;border-radius:12px}
+/* Skryj výchozí Cesium UI prvky */
+.cesium-widget-credits{display:none!important}
+.cesium-viewer-toolbar{display:none!important}
+.cesium-viewer-animationContainer{display:none!important}
+.cesium-viewer-timelineContainer{display:none!important}
+.cesium-viewer-bottom{display:none!important}
+.cesium-viewer-fullscreenContainer{display:none!important}
+.cesium-viewer-geocoderContainer{display:none!important}
 </style>
 </head>
 <body>
-<div id="globe-container"></div>
-<div id="loading">Načítám...</div>
+<div id="cesiumContainer"></div>
+<div id="loading">Načítám satelitní mapu...</div>
 <h1>Světová mapa dolů</h1>
 <div id="counter"></div>
 <div id="search-wrap">
@@ -105,14 +114,12 @@ td input:focus{background:rgba(100,160,255,0.1)}
 
 <div id="bottom-bar">
   <div class="bar-item">
-    <span class="bar-label">🖥 Rozlišení</span>
-    <input type="range" id="sl-quality" min="0" max="100" value="80" oninput="onQuality(this.value)">
-    <span class="bar-val" id="sl-quality-val">80</span>
+    <span class="bar-label">⬤ Velikost bodů</span>
+    <input type="range" id="sl-size" min="0" max="100" value="50" oninput="onSize(this.value)">
+    <span class="bar-val" id="sl-size-val">50</span>
   </div>
   <div class="bar-item">
-    <span class="bar-label">⬤ Velikost bodů</span>
-    <input type="range" id="sl-size" min="0" max="100" value="60" oninput="onSize(this.value)">
-    <span class="bar-val" id="sl-size-val">60</span>
+    <span class="bar-label" style="color:rgba(200,220,255,0.3);font-size:10px">Satelit: Cesium Ion</span>
   </div>
 </div>
 
@@ -123,10 +130,6 @@ td input:focus{background:rgba(100,160,255,0.1)}
     <div class="leg"><div class="leg-dot" style="background:#ff4444"></div>Rudný důl</div>
     <div class="leg"><div class="leg-dot" style="background:#aaaaaa"></div>Uhelný důl</div>
     <div class="leg"><div class="leg-dot" style="background:#ffcc00"></div>Tunel</div>
-    <hr class="leg-sep">
-    <div class="leg-title">Zoom</div>
-    <div class="leg" style="font-size:12px;color:rgba(200,220,255,0.6)">Oddáleno: top 200 dolů</div>
-    <div class="leg" style="font-size:12px;color:rgba(200,220,255,0.6)">Přiblíženo: všechny doly</div>
     <hr class="leg-sep">
     <div class="leg-title">Velikost bodu</div>
     <div class="leg" style="font-size:12px;color:rgba(200,220,255,0.6)">Větší bod = vyšší obrat</div>
@@ -204,85 +207,22 @@ td input:focus{background:rgba(100,160,255,0.1)}
 </div>
 
 <script src="data.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-var MAPBOX_TOKEN="pk.eyJ1IjoibWF4c3ZvemlsIiwiYSI6ImNtbnZ6bG93bTFidDAyd3M5cGp1M3psZTIifQ.2syFlWH6PdSpp5pOtj1IBw";
+Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkYTA2NDVlMi05YWZiLTQyOWItYTgxNi1mNTNlMDNkYjBlMDMiLCJpZCI6NDE3MTgwLCJpYXQiOjE3NzYwMTMyNDl9.U1EFBOKnvO-bpCoGAyc8aG8JTqCAidTbyXnqPPScM7s";
+
 var FIXED_COLS=["name","city","country","typ","obrat","prodano","stroje","poznamky","lat","lng"];
 var COL_LABELS={name:"Název",city:"Město",country:"Země",typ:"Typ",obrat:"Obrat (mil. Kč)",prodano:"Prodáno",stroje:"Stroje",poznamky:"Poznámky",lat:"Lat",lng:"Lng"};
-var COLORS={rudny:"#ff4444",uhelny:"#aaaaaa",tunel:"#ffcc00"};
+var COLORS={rudny:Cesium.Color.fromCssColorString("#ff4444"),uhelny:Cesium.Color.fromCssColorString("#aaaaaa"),tunel:Cesium.Color.fromCssColorString("#ffcc00")};
+var COLORS_CSS={rudny:"#ff4444",uhelny:"#aaaaaa",tunel:"#ffcc00"};
+
 var columns=FIXED_COLS.slice();
 var tableData=[];
-var globe=null;
+var viewer=null;
+var entities=[];
 var typFilter="vse",prodFilter="vse",minObrat=0,maxObrat=900;
-var geoPoints=[];
-var maxObratVal=1;
-var throttleTimer=null;
-var qualityVal=80;
-var sizeVal=60;
-
-function throttle(fn,ms){
-  if(throttleTimer)return;
-  throttleTimer=setTimeout(function(){throttleTimer=null;fn();},ms);
-}
-
-function getLodLimit(alt){
-  if(alt>2.5)return 200;
-  if(alt>1.5)return 500;
-  if(alt>0.8)return 1500;
-  return 999999;
-}
-
-function qualityToPixelRatio(q){
-  if(q<=0)return 0.3;
-  if(q<=50)return 0.3+(q/50)*0.7;
-  return 1.0+((q-50)/50)*1.5;
-}
-
-function sizeMultiplier(){
-  return 0.4+(sizeVal/100)*4.0;
-}
-
-function calcRadius(obrat,alt){
-  var oRatio=obrat/maxObratVal;
-  var base=0.08+(oRatio*0.20);
-  var zoomScale=Math.pow(alt/2.5,1.1);
-  zoomScale=Math.max(0.05,Math.min(1.0,zoomScale));
-  return base*zoomScale*sizeMultiplier();
-}
-
-function onQuality(v){
-  qualityVal=parseInt(v);
-  document.getElementById("sl-quality-val").textContent=qualityVal;
-  if(!globe)return;
-  var pr=Math.min(qualityToPixelRatio(qualityVal),window.devicePixelRatio*2);
-  globe.renderer().setPixelRatio(pr);
-}
-
-function onSize(v){
-  sizeVal=parseInt(v);
-  document.getElementById("sl-size-val").textContent=sizeVal;
-  applyLod();
-}
-
-function loadData(){
-  try{
-    var d=localStorage.getItem("dulni_v8");
-    var c=localStorage.getItem("dulni_cols_v8");
-    tableData=d?JSON.parse(d):MINE_DATA.map(function(r){return Object.assign({},r);});
-    columns=c?JSON.parse(c):FIXED_COLS.slice();
-  }catch(e){
-    tableData=MINE_DATA.map(function(r){return Object.assign({},r);});
-    columns=FIXED_COLS.slice();
-  }
-}
-
-function saveData(){
-  try{
-    localStorage.setItem("dulni_v8",JSON.stringify(tableData));
-    localStorage.setItem("dulni_cols_v8",JSON.stringify(columns));
-  }catch(e){}
-}
+var sizeVal=50;
 
 function getObrat(r){return parseFloat(r.obrat)||0;}
 
@@ -298,8 +238,33 @@ function fixEncoding(s){
 
 function safeText(s){return fixEncoding(String(s||""));}
 
-function rebuildGeoPoints(skipLod){
-  var filtered=tableData.filter(function(r){
+function loadData(){
+  try{
+    var d=localStorage.getItem("dulni_v9");
+    var c=localStorage.getItem("dulni_cols_v9");
+    tableData=d?JSON.parse(d):MINE_DATA.map(function(r){return Object.assign({},r);});
+    columns=c?JSON.parse(c):FIXED_COLS.slice();
+  }catch(e){
+    tableData=MINE_DATA.map(function(r){return Object.assign({},r);});
+    columns=FIXED_COLS.slice();
+  }
+}
+
+function saveData(){
+  try{
+    localStorage.setItem("dulni_v9",JSON.stringify(tableData));
+    localStorage.setItem("dulni_cols_v9",JSON.stringify(columns));
+  }catch(e){}
+}
+
+function calcPixelSize(obrat,maxObrat){
+  var ratio=obrat/maxObrat;
+  var base=6+(ratio*14);
+  return base*(0.4+(sizeVal/100)*2.0);
+}
+
+function getFilteredData(){
+  return tableData.filter(function(r){
     if(!r.lat||!r.lng||isNaN(parseFloat(r.lat))||isNaN(parseFloat(r.lng)))return false;
     if(typFilter!=="vse"&&r.typ!==typFilter)return false;
     if(prodFilter==="prodano"&&r.prodano!=="ano")return false;
@@ -308,31 +273,40 @@ function rebuildGeoPoints(skipLod){
     if(o<minObrat||o>maxObrat)return false;
     return true;
   });
-  filtered.sort(function(a,b){return getObrat(b)-getObrat(a);});
-  maxObratVal=filtered.length?getObrat(filtered[0]):1;
-  if(maxObratVal<1)maxObratVal=1;
-  geoPoints=filtered.map(function(r){
-    return{lat:parseFloat(r.lat),lng:parseFloat(r.lng),color:COLORS[r.typ]||"#888888",obrat:getObrat(r),_ref:r};
+}
+
+function rebuildEntities(){
+  if(!viewer)return;
+  viewer.entities.removeAll();
+  entities=[];
+
+  var filtered=getFilteredData();
+  var maxO=Math.max.apply(null,filtered.map(getObrat).concat([1]));
+
+  filtered.forEach(function(r){
+    var color=COLORS[r.typ]||Cesium.Color.GRAY;
+    var ps=calcPixelSize(getObrat(r),maxO);
+    var e=viewer.entities.add({
+      position:Cesium.Cartesian3.fromDegrees(parseFloat(r.lng),parseFloat(r.lat)),
+      point:{
+        pixelSize:ps,
+        color:color,
+        outlineColor:Cesium.Color.WHITE.withAlpha(0.8),
+        outlineWidth:1.5,
+        heightReference:Cesium.HeightReference.CLAMP_TO_GROUND,
+        scaleByDistance:new Cesium.NearFarScalar(1e6,1.5,1e8,0.4)
+      },
+      properties:{ref:r}
+    });
+    entities.push(e);
   });
-  if(!skipLod)applyLod();
+
+  updateCounter(filtered.length);
 }
 
-function applyLod(){
-  if(!globe)return;
-  var alt=globe.pointOfView().altitude;
-  var limit=getLodLimit(alt);
-  var visible=limit>=geoPoints.length?geoPoints:geoPoints.slice(0,limit);
-  visible.forEach(function(p){p.r=calcRadius(p.obrat,alt);});
-  globe.pointsData(visible).pointRadius("r");
-  updateCounter(visible.length,geoPoints.length);
-}
-
-function updateCounter(shown,total){
-  var all=tableData.filter(function(r){return r.lat&&r.lng;}).length;
-  document.getElementById("counter").textContent=
-    shown===total
-      ?"Zobrazeno: "+shown+" / "+all
-      :"Zobrazeno: "+shown+" z "+total+" – přibližte pro více";
+function updateCounter(shown){
+  var total=tableData.filter(function(r){return r.lat&&r.lng;}).length;
+  document.getElementById("counter").textContent="Zobrazeno: "+shown+" / "+total;
 }
 
 function showDetail(r){
@@ -348,7 +322,7 @@ function showDetail(r){
   });
   document.getElementById("info-box").innerHTML=
     '<div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:8px;flex-wrap:wrap">'
-    +'<strong style="color:'+(COLORS[r.typ]||"#888")+';font-size:16px">'+safeText(r.name)+'</strong>'
+    +'<strong style="color:'+(COLORS_CSS[r.typ]||"#888")+';font-size:16px">'+safeText(r.name)+'</strong>'
     +'<span style="color:rgba(200,220,255,0.4)">'+safeText(r.city)+", "+safeText(r.country)+'</span>'
     +'<span class="badge badge-'+(r.typ||"")+'">'+safeText(r.typ)+'</span>'+pb+'</div>'
     +'<div class="info-grid">'
@@ -358,81 +332,86 @@ function showDetail(r){
     +extra+'</div>';
 }
 
-function makeLabel(d){
-  var r=d._ref;if(!r)return"";
-  return'<div style="background:rgba(6,13,26,0.95);border:2px solid '+(COLORS[r.typ]||"#888")+';border-radius:8px;padding:10px 14px;font-family:sans-serif;color:#c8deff;min-width:210px;max-width:290px;line-height:1.7">'
-    +'<div style="font-size:14px;font-weight:600;color:'+(COLORS[r.typ]||"#888")+'">'+safeText(r.name)+'</div>'
-    +'<div style="font-size:11px;color:rgba(200,220,255,0.5);margin-bottom:5px">'+safeText(r.city)+", "+safeText(r.country)+'</div>'
-    +'<div style="font-size:12px">Obrat: <b>'+(r.obrat||"0")+' mil. Kč</b></div>'
-    +'<div style="font-size:11px;color:rgba(200,220,255,0.6);margin-top:3px">'+safeText(r.poznamky)+'</div>'
-    +'<div style="margin-top:5px;font-size:12px">'
-    +(r.prodano==="ano"?'<span style="color:#ffcc44">&#9733; Prodáno</span>':'<span style="color:#8899bb">&#9675; Potenciál</span>')
-    +'</div></div>';
+function onSize(v){
+  sizeVal=parseInt(v);
+  document.getElementById("sl-size-val").textContent=sizeVal;
+  rebuildEntities();
 }
 
-function buildGlobe(){
-  rebuildGeoPoints(true);
+function buildViewer(){
+  viewer=new Cesium.Viewer("cesiumContainer",{
+    terrainProvider:Cesium.createWorldTerrain(),
+    baseLayerPicker:false,
+    geocoder:false,
+    homeButton:false,
+    sceneModePicker:false,
+    navigationHelpButton:false,
+    animation:false,
+    timeline:false,
+    fullscreenButton:false,
+    infoBox:false,
+    selectionIndicator:false,
+    creditContainer:document.createElement("div")
+  });
 
-  globe=Globe()
-    .globeImageUrl("https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token="+MAPBOX_TOKEN)
-    .backgroundImageUrl("https://unpkg.com/three-globe/example/img/night-sky.png")
-    .pointsData(geoPoints)
-    .pointLat("lat")
-    .pointLng("lng")
-    .pointColor("color")
-    .pointRadius("r")
-    .pointAltitude(0.001)
-    .pointResolution(16)
-    .pointLabel(makeLabel)
-    .onPointClick(function(d){showDetail(d._ref);})
-    (document.getElementById("globe-container"));
+  // Satelitní snímky Bing přes Cesium Ion
+  viewer.imageryLayers.removeAll();
+  viewer.imageryLayers.addImageryProvider(
+    new Cesium.IonImageryProvider({assetId:2})
+  );
 
-  var pr=Math.min(qualityToPixelRatio(qualityVal),window.devicePixelRatio*2);
-  globe.renderer().setPixelRatio(pr);
-  globe.renderer().setSize(window.innerWidth,window.innerHeight);
-  globe.pointOfView({lat:20,lng:15,altitude:2.2},1000);
+  // Počáteční pohled na svět
+  viewer.camera.setView({
+    destination:Cesium.Cartesian3.fromDegrees(15,20,20000000)
+  });
 
-  applyLod();
   document.getElementById("loading").style.display="none";
+  rebuildEntities();
 
-  globe.controls().addEventListener("change",function(){
-    throttle(applyLod,150);
-  });
+  // Klikání na body
+  var handler=new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  handler.setInputAction(function(click){
+    var picked=viewer.scene.pick(click.position);
+    if(Cesium.defined(picked)&&picked.id&&picked.id.properties){
+      var r=picked.id.properties.ref.getValue();
+      showDetail(r);
+    }
+  },Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-  setTimeout(function(){
-    var s=document.createElement("script");
-    s.src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js";
-    s.onload=function(){
-      fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json")
-        .then(function(r){return r.json();})
-        .then(function(world){
-          globe
-            .polygonsData(topojson.feature(world,world.objects.countries).features)
-            .polygonAltitude(0.002)
-            .polygonCapColor(function(){return"rgba(255,255,255,0.02)";})
-            .polygonSideColor(function(){return"rgba(255,255,255,0.02)";})
-            .polygonStrokeColor(function(){return"rgba(255,255,255,0.6)";});
-        });
-    };
-    document.head.appendChild(s);
-  },2000);
+  // Tooltip při najetí
+  var tooltip=document.createElement("div");
+  tooltip.style.cssText="position:absolute;background:rgba(6,13,26,0.95);border:1.5px solid #4da6ff;border-radius:8px;padding:8px 12px;font-size:13px;color:#c8deff;pointer-events:none;display:none;z-index:300;max-width:260px;line-height:1.6";
+  document.body.appendChild(tooltip);
 
-  window.addEventListener("resize",function(){
-    globe.renderer().setSize(window.innerWidth,window.innerHeight);
-    globe.camera().aspect=window.innerWidth/window.innerHeight;
-    globe.camera().updateProjectionMatrix();
-  });
+  handler.setInputAction(function(move){
+    var picked=viewer.scene.pick(move.endPosition);
+    if(Cesium.defined(picked)&&picked.id&&picked.id.properties){
+      var r=picked.id.properties.ref.getValue();
+      var col=COLORS_CSS[r.typ]||"#888";
+      tooltip.style.display="block";
+      tooltip.style.left=(move.endPosition.x+14)+"px";
+      tooltip.style.top=(move.endPosition.y-10)+"px";
+      tooltip.innerHTML='<div style="font-weight:600;color:'+col+'">'+safeText(r.name)+'</div>'
+        +'<div style="font-size:11px;color:rgba(200,220,255,0.5)">'+safeText(r.city)+", "+safeText(r.country)+'</div>'
+        +'<div style="font-size:12px;margin-top:3px">Obrat: <b>'+(r.obrat||"0")+' mil. Kč</b></div>'
+        +'<div style="font-size:12px">'+(r.prodano==="ano"?'<span style="color:#ffcc44">★ Prodáno</span>':'<span style="color:#8899bb">◯ Potenciál</span>')+'</div>';
+      viewer.scene.canvas.style.cursor="pointer";
+    }else{
+      tooltip.style.display="none";
+      viewer.scene.canvas.style.cursor="default";
+    }
+  },Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 }
 
 function setTypFilter(typ,btn){
   typFilter=typ;
   ["ft-vse","ft-rudny","ft-uhelny","ft-tunel"].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove("active");});
-  btn.classList.add("active");rebuildGeoPoints(false);
+  btn.classList.add("active");rebuildEntities();
 }
 function setProdFilter(typ,btn){
   prodFilter=typ;
   ["fp-vse","fp-prodano","fp-ne"].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove("active");});
-  btn.classList.add("active");rebuildGeoPoints(false);
+  btn.classList.add("active");rebuildEntities();
 }
 function onSlider(){
   minObrat=parseInt(document.getElementById("slider-min").value);
@@ -442,7 +421,7 @@ function onSlider(){
   document.getElementById("max-val").textContent=maxObrat;
   document.getElementById("min-val-r").textContent=minObrat;
   document.getElementById("max-val-r").textContent=maxObrat;
-  rebuildGeoPoints(false);
+  rebuildEntities();
 }
 function resetFilters(){
   typFilter="vse";prodFilter="vse";minObrat=0;maxObrat=900;
@@ -452,7 +431,7 @@ function resetFilters(){
   ["max-val","max-val-r"].forEach(function(id){document.getElementById(id).textContent="900";});
   ["ft-vse","fp-vse"].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.add("active");});
   ["ft-rudny","ft-uhelny","ft-tunel","fp-prodano","fp-ne"].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove("active");});
-  rebuildGeoPoints(false);
+  rebuildEntities();
 }
 function onSearch(val){
   var box=document.getElementById("search-results");
@@ -471,13 +450,17 @@ function onSearch(val){
   box.style.display="block";
 }
 function flyTo(lat,lng,name){
-  globe.pointOfView({lat:parseFloat(lat),lng:parseFloat(lng),altitude:0.3},1200);
+  viewer.camera.flyTo({
+    destination:Cesium.Cartesian3.fromDegrees(parseFloat(lng),parseFloat(lat),500000),
+    duration:1.5
+  });
   document.getElementById("search-results").style.display="none";
   document.getElementById("search-input").value=name;
 }
 document.addEventListener("click",function(e){
   if(!e.target.closest("#search-wrap"))document.getElementById("search-results").style.display="none";
 });
+
 function renderTable(){
   var head=document.getElementById("table-head");
   var body=document.getElementById("table-body");
@@ -501,19 +484,19 @@ function renderTable(){
   if(!note){note=document.createElement("p");note.style.cssText="padding:10px 16px;font-size:12px;color:rgba(200,220,255,0.4)";wrap.appendChild(note);}
   note.textContent="Zobrazeno prvních 500 z "+tableData.length+" záznamů.";
 }
-function updateCell(i,col,val){tableData[i][col]=val;saveData();rebuildGeoPoints(false);}
+function updateCell(i,col,val){tableData[i][col]=val;saveData();rebuildEntities();}
 function addRow(){
   var row={};columns.forEach(function(c){row[c]="";});tableData.push(row);
   saveData();renderTable();
   setTimeout(function(){document.getElementById("table-wrap").scrollTop=99999;},50);
 }
-function deleteRow(i){if(!confirm("Smazat řádek?"))return;tableData.splice(i,1);saveData();renderTable();rebuildGeoPoints(false);}
+function deleteRow(i){if(!confirm("Smazat řádek?"))return;tableData.splice(i,1);saveData();renderTable();rebuildEntities();}
 function deleteSelected(){
   var checked=[].slice.call(document.querySelectorAll(".row-check:checked")).map(function(el){return parseInt(el.dataset.i);});
   if(!checked.length){alert("Označ řádky.");return;}
   if(!confirm("Smazat "+checked.length+" řádků?"))return;
   tableData=tableData.filter(function(_,i){return checked.indexOf(i)<0;});
-  saveData();renderTable();rebuildGeoPoints(false);
+  saveData();renderTable();rebuildEntities();
 }
 function toggleAll(cb){document.querySelectorAll(".row-check").forEach(function(el){el.checked=cb.checked;});}
 function addColumn(){document.getElementById("col-name").value="";openModal("modal-col");}
@@ -563,7 +546,7 @@ function importExcel(buffer){
 function applyImport(headers,rows){
   headers.forEach(function(h){if(columns.indexOf(h)<0){columns.push(h);if(!COL_LABELS[h])COL_LABELS[h]=h;}});
   tableData=rows.map(function(r){var obj={};columns.forEach(function(c){obj[c]=r[c]!==undefined?String(r[c]):"";});return obj;});
-  saveData();renderTable();rebuildGeoPoints(false);
+  saveData();renderTable();rebuildEntities();
   alert("Importováno "+rows.length+" řádků.");
 }
 function exportCSV(){
@@ -588,7 +571,7 @@ document.addEventListener("keydown",function(e){
 });
 
 loadData();
-buildGlobe();
+buildViewer();
 renderTable();
 </script>
 </body>
