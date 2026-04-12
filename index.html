@@ -106,7 +106,7 @@ td input:focus{background:rgba(100,160,255,0.1)}
     <div class="leg"><div class="leg-dot" style="background:#aaaaaa"></div>Uhelný důl</div>
     <div class="leg"><div class="leg-dot" style="background:#ddbb00"></div>Tunel</div>
     <hr class="leg-sep">
-    <div class="leg-title">Zoom a zobrazení</div>
+    <div class="leg-title">Zoom</div>
     <div class="leg" style="font-size:12px;color:rgba(200,220,255,0.6)">Oddáleno: top 200 dolů</div>
     <div class="leg" style="font-size:12px;color:rgba(200,220,255,0.6)">Přiblíženo: všechny doly</div>
     <hr class="leg-sep">
@@ -212,6 +212,14 @@ function getLodLimit(alt){
   return 999999;
 }
 
+function calcRadius(obrat,alt){
+  var oRatio=obrat/maxObratVal;
+  var base=0.06+(oRatio*0.16);
+  var zoomScale=Math.pow(alt/2.5,1.4);
+  zoomScale=Math.max(0.08,Math.min(1.0,zoomScale));
+  return base*zoomScale;
+}
+
 function loadData(){
   try{
     var d=localStorage.getItem("dulni_v7");
@@ -247,12 +255,11 @@ function rebuildGeoPoints(skipLod){
   maxObratVal=filtered.length?getObrat(filtered[0]):1;
   if(maxObratVal<1)maxObratVal=1;
   geoPoints=filtered.map(function(r){
-    var o=getObrat(r);
     return{
       lat:parseFloat(r.lat),
       lng:parseFloat(r.lng),
       color:COLORS[r.typ]||"#888888",
-      r:0.12+(o/maxObratVal)*0.5,
+      obrat:getObrat(r),
       _ref:r
     };
   });
@@ -264,7 +271,8 @@ function applyLod(){
   var alt=globe.pointOfView().altitude;
   var limit=getLodLimit(alt);
   var visible=limit>=geoPoints.length?geoPoints:geoPoints.slice(0,limit);
-  globe.pointsData(visible);
+  visible.forEach(function(p){p.r=calcRadius(p.obrat,alt);});
+  globe.pointsData(visible).pointRadius("r");
   updateCounter(visible.length,geoPoints.length);
 }
 
@@ -273,7 +281,30 @@ function updateCounter(shown,total){
   document.getElementById("counter").textContent=
     shown===total
       ?"Zobrazeno: "+shown+" / "+all
-      :"Zobrazeno: "+shown+" z "+total+" (přibližte pro více)";
+      :"Zobrazeno: "+shown+" z "+total+" – přibližte pro více";
+}
+
+function showDetail(r){
+  if(!r)return;
+  var pb=r.prodano==="ano"
+    ?'<span class="badge badge-prodano">&#9733; Prodáno</span>'
+    :'<span class="badge badge-neprodano">&#9675; Neprodáno</span>';
+  var extra="";
+  columns.forEach(function(c){
+    if(FIXED_COLS.indexOf(c)<0&&r[c]){
+      extra+='<div class="info-cell"><span class="info-label">'+COL_LABELS[c]+'</span><span class="info-value">'+r[c]+'</span></div>';
+    }
+  });
+  document.getElementById("info-box").innerHTML=
+    '<div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:8px;flex-wrap:wrap">'
+    +'<strong style="color:'+(COLORS[r.typ]||"#888")+';font-size:16px">'+(r.name||"")+'</strong>'
+    +'<span style="color:rgba(200,220,255,0.4)">'+(r.city||"")+", "+(r.country||"")+'</span>'
+    +'<span class="badge badge-'+(r.typ||"")+'">'+(r.typ||"")+'</span>'+pb+'</div>'
+    +'<div class="info-grid">'
+    +'<div class="info-cell"><span class="info-label">Obrat</span><span class="info-value">'+(r.obrat||"—")+' mil. Kč</span></div>'
+    +'<div class="info-cell"><span class="info-label">Stroje</span><span class="info-value">'+(r.stroje||"—")+'</span></div>'
+    +'<div class="info-cell"><span class="info-label">Poznámky</span><span class="info-value">'+(r.poznamky||"—")+'</span></div>'
+    +extra+'</div>';
 }
 
 function buildGlobe(){
@@ -287,13 +318,12 @@ function buildGlobe(){
     .pointLng("lng")
     .pointColor("color")
     .pointRadius("r")
-    .pointAltitude(0.015)
-    .pointResolution(6)
-    .pointsMerge(true)
+    .pointAltitude(0.01)
+    .pointResolution(8)
     .pointLabel(function(d){
       var r=d._ref;if(!r)return"";
-      return'<div style="background:rgba(6,13,26,0.95);border:1.5px solid '+d.color+';border-radius:8px;padding:10px 14px;font-family:sans-serif;color:#c8deff;min-width:200px;max-width:280px;line-height:1.7">'
-        +'<div style="font-size:14px;font-weight:600;color:'+d.color+'">'+(r.name||"")+'</div>'
+      return'<div style="background:rgba(6,13,26,0.95);border:1.5px solid '+(COLORS[r.typ]||"#888")+';border-radius:8px;padding:10px 14px;font-family:sans-serif;color:#c8deff;min-width:200px;max-width:280px;line-height:1.7">'
+        +'<div style="font-size:14px;font-weight:600;color:'+(COLORS[r.typ]||"#888")+'">'+(r.name||"")+'</div>'
         +'<div style="font-size:11px;color:rgba(200,220,255,0.5);margin-bottom:5px">'+(r.city||"")+", "+(r.country||"")+'</div>'
         +'<div style="font-size:12px">Obrat: <b>'+(r.obrat||"0")+' mil. Kč</b></div>'
         +'<div style="font-size:11px;color:rgba(200,220,255,0.6);margin-top:3px">'+(r.poznamky||"")+'</div>'
@@ -302,20 +332,7 @@ function buildGlobe(){
         +'</div></div>';
     })
     .onPointClick(function(d){
-      var r=d._ref;if(!r)return;
-      var pb=r.prodano==="ano"
-        ?'<span class="badge badge-prodano">&#9733; Prodáno</span>'
-        :'<span class="badge badge-neprodano">&#9675; Neprodáno</span>';
-      document.getElementById("info-box").innerHTML=
-        '<div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:8px;flex-wrap:wrap">'
-        +'<strong style="color:'+d.color+';font-size:16px">'+(r.name||"")+'</strong>'
-        +'<span style="color:rgba(200,220,255,0.4)">'+(r.city||"")+", "+(r.country||"")+'</span>'
-        +'<span class="badge badge-'+(r.typ||"")+'">'+(r.typ||"")+'</span>'+pb+'</div>'
-        +'<div class="info-grid">'
-        +'<div class="info-cell"><span class="info-label">Obrat</span><span class="info-value">'+(r.obrat||"—")+' mil. Kč</span></div>'
-        +'<div class="info-cell"><span class="info-label">Stroje</span><span class="info-value">'+(r.stroje||"—")+'</span></div>'
-        +'<div class="info-cell"><span class="info-label">Poznámky</span><span class="info-value">'+(r.poznamky||"—")+'</span></div>'
-        +'</div>';
+      showDetail(d._ref);
     })
     (document.getElementById("globe-container"));
 
@@ -339,7 +356,7 @@ function buildGlobe(){
         .then(function(world){
           globe
             .polygonsData(topojson.feature(world,world.objects.countries).features)
-            .polygonAltitude(0.004)
+            .polygonAltitude(0.003)
             .polygonCapColor(function(){return"rgba(30,60,100,0.15)";})
             .polygonSideColor(function(){return"rgba(20,40,80,0.08)";})
             .polygonStrokeColor(function(){return"rgba(100,160,255,0.3)";});
