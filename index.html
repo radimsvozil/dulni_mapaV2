@@ -114,8 +114,8 @@ td input:focus{background:rgba(100,160,255,0.1)}
 <div id="bottom-bar">
   <div class="bar-item">
     <span class="bar-label">⬤ Velikost bodů</span>
-    <input type="range" id="sl-size" min="0" max="100" value="50" oninput="onSize(this.value)">
-    <span class="bar-val" id="sl-size-val">50</span>
+    <input type="range" id="sl-size" min="0" max="100" value="40" oninput="onSize(this.value)">
+    <span class="bar-val" id="sl-size-val">40</span>
   </div>
 </div>
 
@@ -215,7 +215,7 @@ var columns=FIXED_COLS.slice();
 var tableData=[];
 var viewer=null;
 var typFilter="vse",prodFilter="vse",minObrat=0,maxObrat=900;
-var sizeVal=50;
+var sizeVal=40;
 
 function getObrat(r){return parseFloat(r.obrat)||0;}
 
@@ -256,10 +256,15 @@ function cesiumColor(typ){
   return Cesium.Color.GRAY;
 }
 
+// Velikost bodu – malá fixní velikost v pixelech
+// škáluje se vzdáleností od kamery přes scaleByDistance
 function calcPixelSize(obrat,maxO){
   var ratio=maxO>0?obrat/maxO:0;
-  var base=8+(ratio*16);
-  return base*(0.5+(sizeVal/100)*2.5);
+  // Rozsah: 3px (malý důl) až 10px (největší důl)
+  var base=3+(ratio*7);
+  // Jezdec 0→0.5x, 50→1.0x, 100→2.0x
+  var mult=0.5+(sizeVal/100)*1.5;
+  return Math.max(1,base*mult);
 }
 
 function getFilteredData(){
@@ -279,18 +284,19 @@ function rebuildEntities(){
   viewer.entities.removeAll();
   var filtered=getFilteredData();
   var maxO=Math.max.apply(null,filtered.map(getObrat).concat([1]));
+
   filtered.forEach(function(r){
     var ps=calcPixelSize(getObrat(r),maxO);
     viewer.entities.add({
-      position:Cesium.Cartesian3.fromDegrees(parseFloat(r.lng),parseFloat(r.lat)),
+      position:Cesium.Cartesian3.fromDegrees(parseFloat(r.lng),parseFloat(r.lat),0),
       point:{
         pixelSize:ps,
         color:cesiumColor(r.typ),
-        outlineColor:Cesium.Color.WHITE.withAlpha(0.9),
-        outlineWidth:1.5,
-        heightReference:Cesium.HeightReference.CLAMP_TO_GROUND,
-        scaleByDistance:new Cesium.NearFarScalar(5e5,1.8,1e8,0.3),
-        disableDepthTestDistance:Number.POSITIVE_INFINITY
+        outlineColor:Cesium.Color.WHITE.withAlpha(0.8),
+        outlineWidth:1,
+        // ŽÁDNÉ heightReference – body jsou přesně na souřadnicích
+        // ŽÁDNÉ disableDepthTestDistance – body neprocházejí globusem
+        scaleByDistance:new Cesium.NearFarScalar(1e4,3.0,2e7,0.5)
       },
       properties:{ref:r}
     });
@@ -348,34 +354,37 @@ async function buildViewer(){
     creditContainer:document.createElement("div")
   });
 
-  // Satelitní snímky Bing přes Cesium Ion
+  // Satelitní snímky
   try{
-    var imageryProvider=await Cesium.IonImageryProvider.fromAssetId(2);
+    var img=await Cesium.IonImageryProvider.fromAssetId(2);
     viewer.imageryLayers.removeAll();
-    viewer.imageryLayers.addImageryProvider(imageryProvider);
+    viewer.imageryLayers.addImageryProvider(img);
   }catch(e){
-    console.warn("Imagery fallback:",e);
+    console.warn("Imagery error:",e);
   }
+
+  // Povol přiblížení až na 100m od povrchu
+  viewer.scene.screenSpaceCameraController.minimumZoomDistance=100;
+
+  // Vypni double-click fly-to
+  viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
 
   // Počáteční pohled
   viewer.camera.setView({
     destination:Cesium.Cartesian3.fromDegrees(15,20,20000000)
   });
 
-  // Vypni výchozí double-click chování
-  viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
-
   document.getElementById("loading").style.display="none";
   rebuildEntities();
 
-  // Tooltip element
+  // Tooltip
   var tooltip=document.createElement("div");
   tooltip.style.cssText="position:absolute;background:rgba(6,13,26,0.95);border:1.5px solid #4da6ff;border-radius:8px;padding:8px 12px;font-size:13px;color:#c8deff;pointer-events:none;display:none;z-index:300;max-width:260px;line-height:1.6";
   document.body.appendChild(tooltip);
 
   var handler=new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 
-  // Klikání
+  // Klik = detail
   handler.setInputAction(function(click){
     var picked=viewer.scene.pick(click.position);
     if(Cesium.defined(picked)&&picked.id&&picked.id.properties){
@@ -386,7 +395,7 @@ async function buildViewer(){
     }
   },Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-  // Tooltip při pohybu
+  // Pohyb myši = tooltip
   handler.setInputAction(function(move){
     var picked=viewer.scene.pick(move.endPosition);
     if(Cesium.defined(picked)&&picked.id&&picked.id.properties){
