@@ -120,9 +120,9 @@ td input:focus{background:rgba(100,160,255,0.1)}
   <div class="panel-header"><h2>Legenda</h2><button class="panel-close" onclick="closePanel('panel-legend')">✕</button></div>
   <div class="panel-body">
     <div class="leg-title">Typ objektu</div>
-    <div class="leg"><div class="leg-dot" style="background:#dd3333"></div>Rudný důl</div>
+    <div class="leg"><div class="leg-dot" style="background:#ff4444"></div>Rudný důl</div>
     <div class="leg"><div class="leg-dot" style="background:#aaaaaa"></div>Uhelný důl</div>
-    <div class="leg"><div class="leg-dot" style="background:#ddbb00"></div>Tunel</div>
+    <div class="leg"><div class="leg-dot" style="background:#ffcc00"></div>Tunel</div>
     <hr class="leg-sep">
     <div class="leg-title">Zoom</div>
     <div class="leg" style="font-size:12px;color:rgba(200,220,255,0.6)">Oddáleno: top 200 dolů</div>
@@ -207,7 +207,7 @@ td input:focus{background:rgba(100,160,255,0.1)}
 <script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-var MAPBOX_TOKEN = "pk.eyJ1IjoibWF4c3ZvemlsIiwiYSI6ImNtbnZ6bG93bTFidDAyd3M5cGp1M3psZTIifQ.2syFlWH6PdSpp5pOtj1IBw";
+var MAPBOX_TOKEN="pk.eyJ1IjoibWF4c3ZvemlsIiwiYSI6ImNtbnZ6bG93bTFidDAyd3M5cGp1M3psZTIifQ.2syFlWH6PdSpp5pOtj1IBw";
 var FIXED_COLS=["name","city","country","typ","obrat","prodano","stroje","poznamky","lat","lng"];
 var COL_LABELS={name:"Název",city:"Město",country:"Země",typ:"Typ",obrat:"Obrat (mil. Kč)",prodano:"Prodáno",stroje:"Stroje",poznamky:"Poznámky",lat:"Lat",lng:"Lng"};
 var COLORS={rudny:"#ff4444",uhelny:"#aaaaaa",tunel:"#ffcc00"};
@@ -240,8 +240,7 @@ function qualityToPixelRatio(q){
 }
 
 function sizeMultiplier(){
-  var s=sizeVal/100;
-  return 0.4+s*4.0;
+  return 0.4+(sizeVal/100)*4.0;
 }
 
 function calcRadius(obrat,alt){
@@ -375,15 +374,12 @@ function buildGlobe(){
   rebuildGeoPoints(true);
 
   globe=Globe()
-    .globeImageUrl(function(){
-      return "https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/256/{z}/{x}/{y}?access_token="+MAPBOX_TOKEN;
-    })
-    .tilesUrl(function(x,y,z){
-      return "https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/256/"+z+"/"+x+"/"+y+"?access_token="+MAPBOX_TOKEN;
-    })
+    .globeImageUrl("https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token="+MAPBOX_TOKEN)
     .backgroundImageUrl("https://unpkg.com/three-globe/example/img/night-sky.png")
     .pointsData(geoPoints)
-    .pointLat("lat").pointLng("lng").pointColor("color")
+    .pointLat("lat")
+    .pointLng("lng")
+    .pointColor("color")
     .pointRadius("r")
     .pointAltitude(0.001)
     .pointResolution(16)
@@ -415,7 +411,7 @@ function buildGlobe(){
             .polygonAltitude(0.002)
             .polygonCapColor(function(){return"rgba(255,255,255,0.02)";})
             .polygonSideColor(function(){return"rgba(255,255,255,0.02)";})
-            .polygonStrokeColor(function(){return"rgba(255,255,255,0.5)";});
+            .polygonStrokeColor(function(){return"rgba(255,255,255,0.6)";});
         });
     };
     document.head.appendChild(s);
