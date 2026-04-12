@@ -88,7 +88,6 @@ td input:focus{background:rgba(100,160,255,0.1)}
 #drop-zone{border:1.5px dashed rgba(100,160,255,0.3);border-radius:10px;padding:16px;text-align:center;color:rgba(200,220,255,0.5);font-size:13px;cursor:pointer;margin:8px 16px}
 #file-input{display:none}
 #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:16px;color:rgba(200,220,255,0.6);z-index:50;text-align:center;background:rgba(6,13,26,0.9);padding:20px 40px;border-radius:12px}
-/* Skryj výchozí Cesium UI prvky */
 .cesium-widget-credits{display:none!important}
 .cesium-viewer-toolbar{display:none!important}
 .cesium-viewer-animationContainer{display:none!important}
@@ -117,9 +116,6 @@ td input:focus{background:rgba(100,160,255,0.1)}
     <span class="bar-label">⬤ Velikost bodů</span>
     <input type="range" id="sl-size" min="0" max="100" value="50" oninput="onSize(this.value)">
     <span class="bar-val" id="sl-size-val">50</span>
-  </div>
-  <div class="bar-item">
-    <span class="bar-label" style="color:rgba(200,220,255,0.3);font-size:10px">Satelit: Cesium Ion</span>
   </div>
 </div>
 
@@ -210,17 +206,14 @@ td input:focus{background:rgba(100,160,255,0.1)}
 <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkYTA2NDVlMi05YWZiLTQyOWItYTgxNi1mNTNlMDNkYjBlMDMiLCJpZCI6NDE3MTgwLCJpYXQiOjE3NzYwMTMyNDl9.U1EFBOKnvO-bpCoGAyc8aG8JTqCAidTbyXnqPPScM7s";
+Cesium.Ion.defaultAccessToken="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkYTA2NDVlMi05YWZiLTQyOWItYTgxNi1mNTNlMDNkYjBlMDMiLCJpZCI6NDE3MTgwLCJpYXQiOjE3NzYwMTMyNDl9.U1EFBOKnvO-bpCoGAyc8aG8JTqCAidTbyXnqPPScM7s";
 
 var FIXED_COLS=["name","city","country","typ","obrat","prodano","stroje","poznamky","lat","lng"];
 var COL_LABELS={name:"Název",city:"Město",country:"Země",typ:"Typ",obrat:"Obrat (mil. Kč)",prodano:"Prodáno",stroje:"Stroje",poznamky:"Poznámky",lat:"Lat",lng:"Lng"};
-var COLORS={rudny:Cesium.Color.fromCssColorString("#ff4444"),uhelny:Cesium.Color.fromCssColorString("#aaaaaa"),tunel:Cesium.Color.fromCssColorString("#ffcc00")};
 var COLORS_CSS={rudny:"#ff4444",uhelny:"#aaaaaa",tunel:"#ffcc00"};
-
 var columns=FIXED_COLS.slice();
 var tableData=[];
 var viewer=null;
-var entities=[];
 var typFilter="vse",prodFilter="vse",minObrat=0,maxObrat=900;
 var sizeVal=50;
 
@@ -235,7 +228,6 @@ function fixEncoding(s){
     .replace(/Å™/g,"ř").replace(/Ä\x9b/g,"ě").replace(/ÅĄ/g,"ť")
     .replace(/Ä\x8f/g,"ď");
 }
-
 function safeText(s){return fixEncoding(String(s||""));}
 
 function loadData(){
@@ -257,10 +249,17 @@ function saveData(){
   }catch(e){}
 }
 
-function calcPixelSize(obrat,maxObrat){
-  var ratio=obrat/maxObrat;
-  var base=6+(ratio*14);
-  return base*(0.4+(sizeVal/100)*2.0);
+function cesiumColor(typ){
+  if(typ==="rudny")return Cesium.Color.fromCssColorString("#ff4444");
+  if(typ==="uhelny")return Cesium.Color.fromCssColorString("#aaaaaa");
+  if(typ==="tunel")return Cesium.Color.fromCssColorString("#ffcc00");
+  return Cesium.Color.GRAY;
+}
+
+function calcPixelSize(obrat,maxO){
+  var ratio=maxO>0?obrat/maxO:0;
+  var base=8+(ratio*16);
+  return base*(0.5+(sizeVal/100)*2.5);
 }
 
 function getFilteredData(){
@@ -278,29 +277,24 @@ function getFilteredData(){
 function rebuildEntities(){
   if(!viewer)return;
   viewer.entities.removeAll();
-  entities=[];
-
   var filtered=getFilteredData();
   var maxO=Math.max.apply(null,filtered.map(getObrat).concat([1]));
-
   filtered.forEach(function(r){
-    var color=COLORS[r.typ]||Cesium.Color.GRAY;
     var ps=calcPixelSize(getObrat(r),maxO);
-    var e=viewer.entities.add({
+    viewer.entities.add({
       position:Cesium.Cartesian3.fromDegrees(parseFloat(r.lng),parseFloat(r.lat)),
       point:{
         pixelSize:ps,
-        color:color,
-        outlineColor:Cesium.Color.WHITE.withAlpha(0.8),
+        color:cesiumColor(r.typ),
+        outlineColor:Cesium.Color.WHITE.withAlpha(0.9),
         outlineWidth:1.5,
         heightReference:Cesium.HeightReference.CLAMP_TO_GROUND,
-        scaleByDistance:new Cesium.NearFarScalar(1e6,1.5,1e8,0.4)
+        scaleByDistance:new Cesium.NearFarScalar(5e5,1.8,1e8,0.3),
+        disableDepthTestDistance:Number.POSITIVE_INFINITY
       },
       properties:{ref:r}
     });
-    entities.push(e);
   });
-
   updateCounter(filtered.length);
 }
 
@@ -338,9 +332,9 @@ function onSize(v){
   rebuildEntities();
 }
 
-function buildViewer(){
+async function buildViewer(){
   viewer=new Cesium.Viewer("cesiumContainer",{
-    terrainProvider:Cesium.createWorldTerrain(),
+    terrain:Cesium.Terrain.fromWorldTerrain(),
     baseLayerPicker:false,
     geocoder:false,
     homeButton:false,
@@ -355,47 +349,60 @@ function buildViewer(){
   });
 
   // Satelitní snímky Bing přes Cesium Ion
-  viewer.imageryLayers.removeAll();
-  viewer.imageryLayers.addImageryProvider(
-    new Cesium.IonImageryProvider({assetId:2})
-  );
+  try{
+    var imageryProvider=await Cesium.IonImageryProvider.fromAssetId(2);
+    viewer.imageryLayers.removeAll();
+    viewer.imageryLayers.addImageryProvider(imageryProvider);
+  }catch(e){
+    console.warn("Imagery fallback:",e);
+  }
 
-  // Počáteční pohled na svět
+  // Počáteční pohled
   viewer.camera.setView({
     destination:Cesium.Cartesian3.fromDegrees(15,20,20000000)
   });
 
+  // Vypni výchozí double-click chování
+  viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+
   document.getElementById("loading").style.display="none";
   rebuildEntities();
 
-  // Klikání na body
-  var handler=new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-  handler.setInputAction(function(click){
-    var picked=viewer.scene.pick(click.position);
-    if(Cesium.defined(picked)&&picked.id&&picked.id.properties){
-      var r=picked.id.properties.ref.getValue();
-      showDetail(r);
-    }
-  },Cesium.ScreenSpaceEventType.LEFT_CLICK);
-
-  // Tooltip při najetí
+  // Tooltip element
   var tooltip=document.createElement("div");
   tooltip.style.cssText="position:absolute;background:rgba(6,13,26,0.95);border:1.5px solid #4da6ff;border-radius:8px;padding:8px 12px;font-size:13px;color:#c8deff;pointer-events:none;display:none;z-index:300;max-width:260px;line-height:1.6";
   document.body.appendChild(tooltip);
 
+  var handler=new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+  // Klikání
+  handler.setInputAction(function(click){
+    var picked=viewer.scene.pick(click.position);
+    if(Cesium.defined(picked)&&picked.id&&picked.id.properties){
+      try{
+        var r=picked.id.properties.ref.getValue(Cesium.JulianDate.now());
+        showDetail(r);
+      }catch(e){}
+    }
+  },Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+  // Tooltip při pohybu
   handler.setInputAction(function(move){
     var picked=viewer.scene.pick(move.endPosition);
     if(Cesium.defined(picked)&&picked.id&&picked.id.properties){
-      var r=picked.id.properties.ref.getValue();
-      var col=COLORS_CSS[r.typ]||"#888";
-      tooltip.style.display="block";
-      tooltip.style.left=(move.endPosition.x+14)+"px";
-      tooltip.style.top=(move.endPosition.y-10)+"px";
-      tooltip.innerHTML='<div style="font-weight:600;color:'+col+'">'+safeText(r.name)+'</div>'
-        +'<div style="font-size:11px;color:rgba(200,220,255,0.5)">'+safeText(r.city)+", "+safeText(r.country)+'</div>'
-        +'<div style="font-size:12px;margin-top:3px">Obrat: <b>'+(r.obrat||"0")+' mil. Kč</b></div>'
-        +'<div style="font-size:12px">'+(r.prodano==="ano"?'<span style="color:#ffcc44">★ Prodáno</span>':'<span style="color:#8899bb">◯ Potenciál</span>')+'</div>';
-      viewer.scene.canvas.style.cursor="pointer";
+      try{
+        var r=picked.id.properties.ref.getValue(Cesium.JulianDate.now());
+        var col=COLORS_CSS[r.typ]||"#888";
+        tooltip.style.display="block";
+        tooltip.style.left=(move.endPosition.x+16)+"px";
+        tooltip.style.top=(move.endPosition.y-10)+"px";
+        tooltip.innerHTML=
+          '<div style="font-weight:600;color:'+col+'">'+safeText(r.name)+'</div>'
+          +'<div style="font-size:11px;color:rgba(200,220,255,0.5)">'+safeText(r.city)+", "+safeText(r.country)+'</div>'
+          +'<div style="font-size:12px;margin-top:3px">Obrat: <b>'+(r.obrat||"0")+' mil. Kč</b></div>'
+          +'<div style="font-size:12px">'+(r.prodano==="ano"?'<span style="color:#ffcc44">★ Prodáno</span>':'<span style="color:#8899bb">◯ Potenciál</span>')+'</div>';
+        viewer.scene.canvas.style.cursor="pointer";
+      }catch(e){}
     }else{
       tooltip.style.display="none";
       viewer.scene.canvas.style.cursor="default";
@@ -460,7 +467,6 @@ function flyTo(lat,lng,name){
 document.addEventListener("click",function(e){
   if(!e.target.closest("#search-wrap"))document.getElementById("search-results").style.display="none";
 });
-
 function renderTable(){
   var head=document.getElementById("table-head");
   var body=document.getElementById("table-body");
