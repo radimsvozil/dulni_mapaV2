@@ -194,7 +194,7 @@ var COL_LABELS={name:"Název",city:"Město",country:"Země",typ:"Typ",obrat:"Obr
 var COLORS={rudny:"#dd3333",uhelny:"#aaaaaa",tunel:"#ddbb00"};
 var columns=FIXED_COLS.slice();
 var tableData=[];
-var globe;
+var globe=null;
 var typFilter="vse",prodFilter="vse",minObrat=0,maxObrat=900;
 var geoPoints=[];
 var maxObratVal=1;
@@ -214,8 +214,8 @@ function getLodLimit(alt){
 
 function loadData(){
   try{
-    var d=localStorage.getItem("dulni_v6");
-    var c=localStorage.getItem("dulni_cols_v6");
+    var d=localStorage.getItem("dulni_v7");
+    var c=localStorage.getItem("dulni_cols_v7");
     tableData=d?JSON.parse(d):MINE_DATA.map(function(r){return Object.assign({},r);});
     columns=c?JSON.parse(c):FIXED_COLS.slice();
   }catch(e){
@@ -226,20 +226,21 @@ function loadData(){
 
 function saveData(){
   try{
-    localStorage.setItem("dulni_v6",JSON.stringify(tableData));
-    localStorage.setItem("dulni_cols_v6",JSON.stringify(columns));
+    localStorage.setItem("dulni_v7",JSON.stringify(tableData));
+    localStorage.setItem("dulni_cols_v7",JSON.stringify(columns));
   }catch(e){}
 }
 
 function getObrat(r){return parseFloat(r.obrat)||0;}
 
-function rebuildGeoPoints(){
+function rebuildGeoPoints(skipLod){
   var filtered=tableData.filter(function(r){
     if(!r.lat||!r.lng||isNaN(parseFloat(r.lat))||isNaN(parseFloat(r.lng)))return false;
     if(typFilter!=="vse"&&r.typ!==typFilter)return false;
     if(prodFilter==="prodano"&&r.prodano!=="ano")return false;
     if(prodFilter==="neprodano"&&r.prodano==="ano")return false;
-    var o=getObrat(r);if(o<minObrat||o>maxObrat)return false;
+    var o=getObrat(r);
+    if(o<minObrat||o>maxObrat)return false;
     return true;
   });
   filtered.sort(function(a,b){return getObrat(b)-getObrat(a);});
@@ -255,11 +256,12 @@ function rebuildGeoPoints(){
       _ref:r
     };
   });
-  applyLod();
+  if(!skipLod)applyLod();
 }
 
 function applyLod(){
-  var alt=globe?globe.pointOfView().altitude:2.2;
+  if(!globe)return;
+  var alt=globe.pointOfView().altitude;
   var limit=getLodLimit(alt);
   var visible=limit>=geoPoints.length?geoPoints:geoPoints.slice(0,limit);
   globe.pointsData(visible);
@@ -275,12 +277,15 @@ function updateCounter(shown,total){
 }
 
 function buildGlobe(){
-  rebuildGeoPoints();
+  rebuildGeoPoints(true);
+
   globe=Globe()
     .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
     .backgroundImageUrl("https://unpkg.com/three-globe/example/img/night-sky.png")
     .pointsData(geoPoints)
-    .pointLat("lat").pointLng("lng").pointColor("color")
+    .pointLat("lat")
+    .pointLng("lng")
+    .pointColor("color")
     .pointRadius("r")
     .pointAltitude(0.015)
     .pointResolution(6)
@@ -317,6 +322,8 @@ function buildGlobe(){
   globe.renderer().setPixelRatio(Math.min(window.devicePixelRatio,1.5));
   globe.renderer().setSize(window.innerWidth,window.innerHeight);
   globe.pointOfView({lat:20,lng:15,altitude:2.2},1000);
+
+  applyLod();
   document.getElementById("loading").style.display="none";
 
   globe.controls().addEventListener("change",function(){
@@ -351,12 +358,12 @@ function buildGlobe(){
 function setTypFilter(typ,btn){
   typFilter=typ;
   ["ft-vse","ft-rudny","ft-uhelny","ft-tunel"].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove("active");});
-  btn.classList.add("active");rebuildGeoPoints();
+  btn.classList.add("active");rebuildGeoPoints(false);
 }
 function setProdFilter(typ,btn){
   prodFilter=typ;
   ["fp-vse","fp-prodano","fp-ne"].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove("active");});
-  btn.classList.add("active");rebuildGeoPoints();
+  btn.classList.add("active");rebuildGeoPoints(false);
 }
 function onSlider(){
   minObrat=parseInt(document.getElementById("slider-min").value);
@@ -366,7 +373,7 @@ function onSlider(){
   document.getElementById("max-val").textContent=maxObrat;
   document.getElementById("min-val-r").textContent=minObrat;
   document.getElementById("max-val-r").textContent=maxObrat;
-  rebuildGeoPoints();
+  rebuildGeoPoints(false);
 }
 function resetFilters(){
   typFilter="vse";prodFilter="vse";minObrat=0;maxObrat=900;
@@ -376,7 +383,7 @@ function resetFilters(){
   ["max-val","max-val-r"].forEach(function(id){document.getElementById(id).textContent="900";});
   ["ft-vse","fp-vse"].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.add("active");});
   ["ft-rudny","ft-uhelny","ft-tunel","fp-prodano","fp-ne"].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove("active");});
-  rebuildGeoPoints();
+  rebuildGeoPoints(false);
 }
 function onSearch(val){
   var box=document.getElementById("search-results");
@@ -422,22 +429,29 @@ function renderTable(){
   document.getElementById("drop-zone").style.display="none";
   var wrap=document.getElementById("table-wrap");
   var note=wrap.querySelector("p");
-  if(!note){note=document.createElement("p");note.style.cssText="padding:10px 16px;font-size:12px;color:rgba(200,220,255,0.4)";wrap.appendChild(note);}
+  if(!note){
+    note=document.createElement("p");
+    note.style.cssText="padding:10px 16px;font-size:12px;color:rgba(200,220,255,0.4)";
+    wrap.appendChild(note);
+  }
   note.textContent="Zobrazeno prvních 500 z "+tableData.length+" záznamů.";
 }
-function updateCell(i,col,val){tableData[i][col]=val;saveData();rebuildGeoPoints();}
+function updateCell(i,col,val){tableData[i][col]=val;saveData();rebuildGeoPoints(false);}
 function addRow(){
   var row={};columns.forEach(function(c){row[c]="";});tableData.push(row);
   saveData();renderTable();
   setTimeout(function(){document.getElementById("table-wrap").scrollTop=99999;},50);
 }
-function deleteRow(i){if(!confirm("Smazat řádek?"))return;tableData.splice(i,1);saveData();renderTable();rebuildGeoPoints();}
+function deleteRow(i){
+  if(!confirm("Smazat řádek?"))return;
+  tableData.splice(i,1);saveData();renderTable();rebuildGeoPoints(false);
+}
 function deleteSelected(){
   var checked=[].slice.call(document.querySelectorAll(".row-check:checked")).map(function(el){return parseInt(el.dataset.i);});
   if(!checked.length){alert("Označ řádky.");return;}
   if(!confirm("Smazat "+checked.length+" řádků?"))return;
   tableData=tableData.filter(function(_,i){return checked.indexOf(i)<0;});
-  saveData();renderTable();rebuildGeoPoints();
+  saveData();renderTable();rebuildGeoPoints(false);
 }
 function toggleAll(cb){document.querySelectorAll(".row-check").forEach(function(el){el.checked=cb.checked;});}
 function addColumn(){document.getElementById("col-name").value="";openModal("modal-col");}
@@ -487,7 +501,7 @@ function importExcel(buffer){
 function applyImport(headers,rows){
   headers.forEach(function(h){if(columns.indexOf(h)<0){columns.push(h);if(!COL_LABELS[h])COL_LABELS[h]=h;}});
   tableData=rows.map(function(r){var obj={};columns.forEach(function(c){obj[c]=r[c]!==undefined?String(r[c]):"";});return obj;});
-  saveData();renderTable();rebuildGeoPoints();
+  saveData();renderTable();rebuildGeoPoints(false);
   alert("Importováno "+rows.length+" řádků.");
 }
 function exportCSV(){
