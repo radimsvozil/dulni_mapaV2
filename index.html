@@ -27,18 +27,11 @@ h1{position:absolute;top:16px;left:16px;font-size:17px;font-weight:400;color:rgb
 .info-cell{display:flex;flex-direction:column;align-items:center;gap:2px}
 .info-label{color:rgba(200,220,255,0.45);font-size:11px;text-transform:uppercase;letter-spacing:0.5px}
 .info-value{color:rgba(200,220,255,0.95);font-size:13px}
-
-/* Spodní lišta s jezdci */
-#bottom-bar{
-  position:absolute;bottom:0;left:0;right:0;height:54px;
-  background:rgba(6,13,26,0.92);border-top:0.5px solid rgba(100,160,255,0.2);
-  display:flex;align-items:center;gap:24px;padding:0 20px;z-index:100;
-}
-.bar-item{display:flex;align-items:center;gap:10px;flex:1;max-width:280px}
-.bar-label{font-size:11px;color:rgba(200,220,255,0.5);white-space:nowrap;min-width:80px}
-.bar-item input[type=range]{flex:1;accent-color:#4da6ff;height:4px;cursor:pointer}
+#bottom-bar{position:absolute;bottom:0;left:0;right:0;height:54px;background:rgba(6,13,26,0.92);border-top:0.5px solid rgba(100,160,255,0.2);display:flex;align-items:center;gap:24px;padding:0 20px;z-index:100}
+.bar-item{display:flex;align-items:center;gap:10px;flex:1;max-width:300px}
+.bar-label{font-size:11px;color:rgba(200,220,255,0.5);white-space:nowrap;min-width:90px}
+.bar-item input[type=range]{flex:1;accent-color:#4da6ff;cursor:pointer}
 .bar-val{font-size:12px;color:#88bbff;min-width:28px;text-align:right}
-
 .panel{position:absolute;top:0;right:0;height:100vh;background:rgba(6,13,26,0.97);border-left:0.5px solid rgba(100,160,255,0.2);z-index:200;display:none;flex-direction:column;overflow:hidden}
 .panel.open{display:flex}
 #panel-legend{width:220px}
@@ -110,17 +103,16 @@ td input:focus{background:rgba(100,160,255,0.1)}
 <button class="ui-btn" id="btn-filter" onclick="togglePanel('panel-filter')" title="Filtry">⚙️</button>
 <div id="info-box">Klikni na bod pro detail &nbsp;|&nbsp; Najeď myší pro náhled</div>
 
-<!-- Spodní lišta s jezdci -->
 <div id="bottom-bar">
   <div class="bar-item">
     <span class="bar-label">🖥 Rozlišení</span>
-    <input type="range" id="sl-quality" min="0" max="100" value="70" oninput="onQuality(this.value)">
-    <span class="bar-val" id="sl-quality-val">70</span>
+    <input type="range" id="sl-quality" min="0" max="100" value="80" oninput="onQuality(this.value)">
+    <span class="bar-val" id="sl-quality-val">80</span>
   </div>
   <div class="bar-item">
     <span class="bar-label">⬤ Velikost bodů</span>
-    <input type="range" id="sl-size" min="0" max="100" value="50" oninput="onSize(this.value)">
-    <span class="bar-val" id="sl-size-val">50</span>
+    <input type="range" id="sl-size" min="0" max="100" value="60" oninput="onSize(this.value)">
+    <span class="bar-val" id="sl-size-val">60</span>
   </div>
 </div>
 
@@ -215,9 +207,10 @@ td input:focus{background:rgba(100,160,255,0.1)}
 <script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
+var MAPBOX_TOKEN = "pk.eyJ1IjoibWF4c3ZvemlsIiwiYSI6ImNtbnZ6bG93bTFidDAyd3M5cGp1M3psZTIifQ.2syFlWH6PdSpp5pOtj1IBw";
 var FIXED_COLS=["name","city","country","typ","obrat","prodano","stroje","poznamky","lat","lng"];
 var COL_LABELS={name:"Název",city:"Město",country:"Země",typ:"Typ",obrat:"Obrat (mil. Kč)",prodano:"Prodáno",stroje:"Stroje",poznamky:"Poznámky",lat:"Lat",lng:"Lng"};
-var COLORS={rudny:"#dd3333",uhelny:"#aaaaaa",tunel:"#ddbb00"};
+var COLORS={rudny:"#ff4444",uhelny:"#aaaaaa",tunel:"#ffcc00"};
 var columns=FIXED_COLS.slice();
 var tableData=[];
 var globe=null;
@@ -225,10 +218,8 @@ var typFilter="vse",prodFilter="vse",minObrat=0,maxObrat=900;
 var geoPoints=[];
 var maxObratVal=1;
 var throttleTimer=null;
-
-// Jezdce – výchozí hodnoty
-var qualityVal=70;  // 0–100
-var sizeVal=50;     // 0–100
+var qualityVal=80;
+var sizeVal=60;
 
 function throttle(fn,ms){
   if(throttleTimer)return;
@@ -242,40 +233,33 @@ function getLodLimit(alt){
   return 999999;
 }
 
-// Rozlišení: 0→0.3, 50→1.0, 100→2.0
 function qualityToPixelRatio(q){
   if(q<=0)return 0.3;
   if(q<=50)return 0.3+(q/50)*0.7;
-  return 1.0+((q-50)/50)*1.0;
+  return 1.0+((q-50)/50)*1.5;
 }
 
-// Velikost bodu – jezdec sizeVal škáluje výsledný radius
-// sizeVal 0→0.3x, 50→1.0x, 100→2.5x
 function sizeMultiplier(){
   var s=sizeVal/100;
-  return 0.3+s*2.2;
+  return 0.4+s*4.0;
 }
 
 function calcRadius(obrat,alt){
   var oRatio=obrat/maxObratVal;
-  var base=0.05+(oRatio*0.13);
-  var zoomScale=Math.pow(alt/2.5,1.2);
-  zoomScale=Math.max(0.06,Math.min(1.0,zoomScale));
+  var base=0.08+(oRatio*0.20);
+  var zoomScale=Math.pow(alt/2.5,1.1);
+  zoomScale=Math.max(0.05,Math.min(1.0,zoomScale));
   return base*zoomScale*sizeMultiplier();
 }
 
-// ── Jezdec Rozlišení ────────────────────────────────────────────
 function onQuality(v){
   qualityVal=parseInt(v);
   document.getElementById("sl-quality-val").textContent=qualityVal;
   if(!globe)return;
-  var pr=qualityToPixelRatio(qualityVal);
-  // Omez na max pixelRatio zařízení
-  pr=Math.min(pr,window.devicePixelRatio);
+  var pr=Math.min(qualityToPixelRatio(qualityVal),window.devicePixelRatio*2);
   globe.renderer().setPixelRatio(pr);
 }
 
-// ── Jezdec Velikost bodů ─────────────────────────────────────────
 function onSize(v){
   sizeVal=parseInt(v);
   document.getElementById("sl-size-val").textContent=sizeVal;
@@ -389,8 +373,14 @@ function makeLabel(d){
 
 function buildGlobe(){
   rebuildGeoPoints(true);
+
   globe=Globe()
-    .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-day.jpg")
+    .globeImageUrl(function(){
+      return "https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/256/{z}/{x}/{y}?access_token="+MAPBOX_TOKEN;
+    })
+    .tilesUrl(function(x,y,z){
+      return "https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/256/"+z+"/"+x+"/"+y+"?access_token="+MAPBOX_TOKEN;
+    })
     .backgroundImageUrl("https://unpkg.com/three-globe/example/img/night-sky.png")
     .pointsData(geoPoints)
     .pointLat("lat").pointLng("lng").pointColor("color")
@@ -401,8 +391,8 @@ function buildGlobe(){
     .onPointClick(function(d){showDetail(d._ref);})
     (document.getElementById("globe-container"));
 
-  // Nastav rozlišení podle výchozí hodnoty jezdce
-  globe.renderer().setPixelRatio(qualityToPixelRatio(qualityVal));
+  var pr=Math.min(qualityToPixelRatio(qualityVal),window.devicePixelRatio*2);
+  globe.renderer().setPixelRatio(pr);
   globe.renderer().setSize(window.innerWidth,window.innerHeight);
   globe.pointOfView({lat:20,lng:15,altitude:2.2},1000);
 
@@ -423,9 +413,9 @@ function buildGlobe(){
           globe
             .polygonsData(topojson.feature(world,world.objects.countries).features)
             .polygonAltitude(0.002)
-            .polygonCapColor(function(){return"rgba(30,60,100,0.12)";})
-            .polygonSideColor(function(){return"rgba(20,40,80,0.06)";})
-            .polygonStrokeColor(function(){return"rgba(100,160,255,0.4)";});
+            .polygonCapColor(function(){return"rgba(255,255,255,0.02)";})
+            .polygonSideColor(function(){return"rgba(255,255,255,0.02)";})
+            .polygonStrokeColor(function(){return"rgba(255,255,255,0.5)";});
         });
     };
     document.head.appendChild(s);
@@ -485,7 +475,7 @@ function onSearch(val){
   box.style.display="block";
 }
 function flyTo(lat,lng,name){
-  globe.pointOfView({lat:parseFloat(lat),lng:parseFloat(lng),altitude:0.4},1200);
+  globe.pointOfView({lat:parseFloat(lat),lng:parseFloat(lng),altitude:0.3},1200);
   document.getElementById("search-results").style.display="none";
   document.getElementById("search-input").value=name;
 }
