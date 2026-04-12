@@ -22,11 +22,23 @@ h1{position:absolute;top:16px;left:16px;font-size:17px;font-weight:400;color:rgb
 .search-item:hover{background:rgba(100,160,255,0.12)}
 .search-item-name{color:#c8deff}
 .search-item-sub{color:rgba(200,220,255,0.45);font-size:11px}
-#info-box{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(6,13,26,0.92);border:0.5px solid rgba(100,160,255,0.35);border-radius:12px;padding:14px 24px;font-size:14px;color:#c8deff;min-width:320px;max-width:680px;text-align:center;pointer-events:none;z-index:10}
+#info-box{position:absolute;bottom:70px;left:50%;transform:translateX(-50%);background:rgba(6,13,26,0.92);border:0.5px solid rgba(100,160,255,0.35);border-radius:12px;padding:14px 24px;font-size:14px;color:#c8deff;min-width:320px;max-width:680px;text-align:center;pointer-events:none;z-index:10}
 .info-grid{display:flex;gap:16px;justify-content:center;margin-top:8px;flex-wrap:wrap}
 .info-cell{display:flex;flex-direction:column;align-items:center;gap:2px}
 .info-label{color:rgba(200,220,255,0.45);font-size:11px;text-transform:uppercase;letter-spacing:0.5px}
 .info-value{color:rgba(200,220,255,0.95);font-size:13px}
+
+/* Spodní lišta s jezdci */
+#bottom-bar{
+  position:absolute;bottom:0;left:0;right:0;height:54px;
+  background:rgba(6,13,26,0.92);border-top:0.5px solid rgba(100,160,255,0.2);
+  display:flex;align-items:center;gap:24px;padding:0 20px;z-index:100;
+}
+.bar-item{display:flex;align-items:center;gap:10px;flex:1;max-width:280px}
+.bar-label{font-size:11px;color:rgba(200,220,255,0.5);white-space:nowrap;min-width:80px}
+.bar-item input[type=range]{flex:1;accent-color:#4da6ff;height:4px;cursor:pointer}
+.bar-val{font-size:12px;color:#88bbff;min-width:28px;text-align:right}
+
 .panel{position:absolute;top:0;right:0;height:100vh;background:rgba(6,13,26,0.97);border-left:0.5px solid rgba(100,160,255,0.2);z-index:200;display:none;flex-direction:column;overflow:hidden}
 .panel.open{display:flex}
 #panel-legend{width:220px}
@@ -97,6 +109,20 @@ td input:focus{background:rgba(100,160,255,0.1)}
 <button class="ui-btn" id="btn-legend" onclick="togglePanel('panel-legend')" title="Legenda">📍</button>
 <button class="ui-btn" id="btn-filter" onclick="togglePanel('panel-filter')" title="Filtry">⚙️</button>
 <div id="info-box">Klikni na bod pro detail &nbsp;|&nbsp; Najeď myší pro náhled</div>
+
+<!-- Spodní lišta s jezdci -->
+<div id="bottom-bar">
+  <div class="bar-item">
+    <span class="bar-label">🖥 Rozlišení</span>
+    <input type="range" id="sl-quality" min="0" max="100" value="70" oninput="onQuality(this.value)">
+    <span class="bar-val" id="sl-quality-val">70</span>
+  </div>
+  <div class="bar-item">
+    <span class="bar-label">⬤ Velikost bodů</span>
+    <input type="range" id="sl-size" min="0" max="100" value="50" oninput="onSize(this.value)">
+    <span class="bar-val" id="sl-size-val">50</span>
+  </div>
+</div>
 
 <div class="panel" id="panel-legend">
   <div class="panel-header"><h2>Legenda</h2><button class="panel-close" onclick="closePanel('panel-legend')">✕</button></div>
@@ -200,6 +226,10 @@ var geoPoints=[];
 var maxObratVal=1;
 var throttleTimer=null;
 
+// Jezdce – výchozí hodnoty
+var qualityVal=70;  // 0–100
+var sizeVal=50;     // 0–100
+
 function throttle(fn,ms){
   if(throttleTimer)return;
   throttleTimer=setTimeout(function(){throttleTimer=null;fn();},ms);
@@ -212,18 +242,50 @@ function getLodLimit(alt){
   return 999999;
 }
 
+// Rozlišení: 0→0.3, 50→1.0, 100→2.0
+function qualityToPixelRatio(q){
+  if(q<=0)return 0.3;
+  if(q<=50)return 0.3+(q/50)*0.7;
+  return 1.0+((q-50)/50)*1.0;
+}
+
+// Velikost bodu – jezdec sizeVal škáluje výsledný radius
+// sizeVal 0→0.3x, 50→1.0x, 100→2.5x
+function sizeMultiplier(){
+  var s=sizeVal/100;
+  return 0.3+s*2.2;
+}
+
 function calcRadius(obrat,alt){
   var oRatio=obrat/maxObratVal;
-  var base=0.06+(oRatio*0.16);
-  var zoomScale=Math.pow(alt/2.5,1.4);
-  zoomScale=Math.max(0.08,Math.min(1.0,zoomScale));
-  return base*zoomScale;
+  var base=0.05+(oRatio*0.13);
+  var zoomScale=Math.pow(alt/2.5,1.2);
+  zoomScale=Math.max(0.06,Math.min(1.0,zoomScale));
+  return base*zoomScale*sizeMultiplier();
+}
+
+// ── Jezdec Rozlišení ────────────────────────────────────────────
+function onQuality(v){
+  qualityVal=parseInt(v);
+  document.getElementById("sl-quality-val").textContent=qualityVal;
+  if(!globe)return;
+  var pr=qualityToPixelRatio(qualityVal);
+  // Omez na max pixelRatio zařízení
+  pr=Math.min(pr,window.devicePixelRatio);
+  globe.renderer().setPixelRatio(pr);
+}
+
+// ── Jezdec Velikost bodů ─────────────────────────────────────────
+function onSize(v){
+  sizeVal=parseInt(v);
+  document.getElementById("sl-size-val").textContent=sizeVal;
+  applyLod();
 }
 
 function loadData(){
   try{
-    var d=localStorage.getItem("dulni_v7");
-    var c=localStorage.getItem("dulni_cols_v7");
+    var d=localStorage.getItem("dulni_v8");
+    var c=localStorage.getItem("dulni_cols_v8");
     tableData=d?JSON.parse(d):MINE_DATA.map(function(r){return Object.assign({},r);});
     columns=c?JSON.parse(c):FIXED_COLS.slice();
   }catch(e){
@@ -234,12 +296,24 @@ function loadData(){
 
 function saveData(){
   try{
-    localStorage.setItem("dulni_v7",JSON.stringify(tableData));
-    localStorage.setItem("dulni_cols_v7",JSON.stringify(columns));
+    localStorage.setItem("dulni_v8",JSON.stringify(tableData));
+    localStorage.setItem("dulni_cols_v8",JSON.stringify(columns));
   }catch(e){}
 }
 
 function getObrat(r){return parseFloat(r.obrat)||0;}
+
+function fixEncoding(s){
+  if(!s)return"";
+  return s
+    .replace(/Ã¡/g,"á").replace(/Ã©/g,"é").replace(/Ã­/g,"í")
+    .replace(/Ã³/g,"ó").replace(/Ãº/g,"ú").replace(/Ã½/g,"ý")
+    .replace(/Å¡/g,"š").replace(/Å¾/g,"ž").replace(/Äč/g,"č")
+    .replace(/Å™/g,"ř").replace(/Ä\x9b/g,"ě").replace(/ÅĄ/g,"ť")
+    .replace(/Ä\x8f/g,"ď");
+}
+
+function safeText(s){return fixEncoding(String(s||""));}
 
 function rebuildGeoPoints(skipLod){
   var filtered=tableData.filter(function(r){
@@ -255,13 +329,7 @@ function rebuildGeoPoints(skipLod){
   maxObratVal=filtered.length?getObrat(filtered[0]):1;
   if(maxObratVal<1)maxObratVal=1;
   geoPoints=filtered.map(function(r){
-    return{
-      lat:parseFloat(r.lat),
-      lng:parseFloat(r.lng),
-      color:COLORS[r.typ]||"#888888",
-      obrat:getObrat(r),
-      _ref:r
-    };
+    return{lat:parseFloat(r.lat),lng:parseFloat(r.lng),color:COLORS[r.typ]||"#888888",obrat:getObrat(r),_ref:r};
   });
   if(!skipLod)applyLod();
 }
@@ -292,51 +360,49 @@ function showDetail(r){
   var extra="";
   columns.forEach(function(c){
     if(FIXED_COLS.indexOf(c)<0&&r[c]){
-      extra+='<div class="info-cell"><span class="info-label">'+COL_LABELS[c]+'</span><span class="info-value">'+r[c]+'</span></div>';
+      extra+='<div class="info-cell"><span class="info-label">'+(COL_LABELS[c]||c)+'</span><span class="info-value">'+safeText(r[c])+'</span></div>';
     }
   });
   document.getElementById("info-box").innerHTML=
     '<div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:8px;flex-wrap:wrap">'
-    +'<strong style="color:'+(COLORS[r.typ]||"#888")+';font-size:16px">'+(r.name||"")+'</strong>'
-    +'<span style="color:rgba(200,220,255,0.4)">'+(r.city||"")+", "+(r.country||"")+'</span>'
-    +'<span class="badge badge-'+(r.typ||"")+'">'+(r.typ||"")+'</span>'+pb+'</div>'
+    +'<strong style="color:'+(COLORS[r.typ]||"#888")+';font-size:16px">'+safeText(r.name)+'</strong>'
+    +'<span style="color:rgba(200,220,255,0.4)">'+safeText(r.city)+", "+safeText(r.country)+'</span>'
+    +'<span class="badge badge-'+(r.typ||"")+'">'+safeText(r.typ)+'</span>'+pb+'</div>'
     +'<div class="info-grid">'
     +'<div class="info-cell"><span class="info-label">Obrat</span><span class="info-value">'+(r.obrat||"—")+' mil. Kč</span></div>'
-    +'<div class="info-cell"><span class="info-label">Stroje</span><span class="info-value">'+(r.stroje||"—")+'</span></div>'
-    +'<div class="info-cell"><span class="info-label">Poznámky</span><span class="info-value">'+(r.poznamky||"—")+'</span></div>'
+    +'<div class="info-cell"><span class="info-label">Stroje</span><span class="info-value">'+safeText(r.stroje||"—")+'</span></div>'
+    +'<div class="info-cell"><span class="info-label">Poznámky</span><span class="info-value">'+safeText(r.poznamky||"—")+'</span></div>'
     +extra+'</div>';
+}
+
+function makeLabel(d){
+  var r=d._ref;if(!r)return"";
+  return'<div style="background:rgba(6,13,26,0.95);border:2px solid '+(COLORS[r.typ]||"#888")+';border-radius:8px;padding:10px 14px;font-family:sans-serif;color:#c8deff;min-width:210px;max-width:290px;line-height:1.7">'
+    +'<div style="font-size:14px;font-weight:600;color:'+(COLORS[r.typ]||"#888")+'">'+safeText(r.name)+'</div>'
+    +'<div style="font-size:11px;color:rgba(200,220,255,0.5);margin-bottom:5px">'+safeText(r.city)+", "+safeText(r.country)+'</div>'
+    +'<div style="font-size:12px">Obrat: <b>'+(r.obrat||"0")+' mil. Kč</b></div>'
+    +'<div style="font-size:11px;color:rgba(200,220,255,0.6);margin-top:3px">'+safeText(r.poznamky)+'</div>'
+    +'<div style="margin-top:5px;font-size:12px">'
+    +(r.prodano==="ano"?'<span style="color:#ffcc44">&#9733; Prodáno</span>':'<span style="color:#8899bb">&#9675; Potenciál</span>')
+    +'</div></div>';
 }
 
 function buildGlobe(){
   rebuildGeoPoints(true);
-
   globe=Globe()
-    .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
+    .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-day.jpg")
     .backgroundImageUrl("https://unpkg.com/three-globe/example/img/night-sky.png")
     .pointsData(geoPoints)
-    .pointLat("lat")
-    .pointLng("lng")
-    .pointColor("color")
+    .pointLat("lat").pointLng("lng").pointColor("color")
     .pointRadius("r")
-    .pointAltitude(0.01)
-    .pointResolution(8)
-    .pointLabel(function(d){
-      var r=d._ref;if(!r)return"";
-      return'<div style="background:rgba(6,13,26,0.95);border:1.5px solid '+(COLORS[r.typ]||"#888")+';border-radius:8px;padding:10px 14px;font-family:sans-serif;color:#c8deff;min-width:200px;max-width:280px;line-height:1.7">'
-        +'<div style="font-size:14px;font-weight:600;color:'+(COLORS[r.typ]||"#888")+'">'+(r.name||"")+'</div>'
-        +'<div style="font-size:11px;color:rgba(200,220,255,0.5);margin-bottom:5px">'+(r.city||"")+", "+(r.country||"")+'</div>'
-        +'<div style="font-size:12px">Obrat: <b>'+(r.obrat||"0")+' mil. Kč</b></div>'
-        +'<div style="font-size:11px;color:rgba(200,220,255,0.6);margin-top:3px">'+(r.poznamky||"")+'</div>'
-        +'<div style="margin-top:5px;font-size:12px">'
-        +(r.prodano==="ano"?'<span style="color:#ffcc44">&#9733; Prodáno</span>':'<span style="color:#8899bb">&#9675; Potenciál</span>')
-        +'</div></div>';
-    })
-    .onPointClick(function(d){
-      showDetail(d._ref);
-    })
+    .pointAltitude(0.001)
+    .pointResolution(16)
+    .pointLabel(makeLabel)
+    .onPointClick(function(d){showDetail(d._ref);})
     (document.getElementById("globe-container"));
 
-  globe.renderer().setPixelRatio(Math.min(window.devicePixelRatio,1.5));
+  // Nastav rozlišení podle výchozí hodnoty jezdce
+  globe.renderer().setPixelRatio(qualityToPixelRatio(qualityVal));
   globe.renderer().setSize(window.innerWidth,window.innerHeight);
   globe.pointOfView({lat:20,lng:15,altitude:2.2},1000);
 
@@ -351,15 +417,15 @@ function buildGlobe(){
     var s=document.createElement("script");
     s.src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js";
     s.onload=function(){
-      fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+      fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json")
         .then(function(r){return r.json();})
         .then(function(world){
           globe
             .polygonsData(topojson.feature(world,world.objects.countries).features)
-            .polygonAltitude(0.003)
-            .polygonCapColor(function(){return"rgba(30,60,100,0.15)";})
-            .polygonSideColor(function(){return"rgba(20,40,80,0.08)";})
-            .polygonStrokeColor(function(){return"rgba(100,160,255,0.3)";});
+            .polygonAltitude(0.002)
+            .polygonCapColor(function(){return"rgba(30,60,100,0.12)";})
+            .polygonSideColor(function(){return"rgba(20,40,80,0.06)";})
+            .polygonStrokeColor(function(){return"rgba(100,160,255,0.4)";});
         });
     };
     document.head.appendChild(s);
@@ -411,10 +477,10 @@ function onSearch(val){
   }).slice(0,8);
   if(!hits.length){box.style.display="none";return;}
   box.innerHTML=hits.map(function(r){
-    var sn=(r.name||"").replace(/'/g,"&#39;");
+    var sn=safeText(r.name).replace(/'/g,"&#39;");
     return'<div class="search-item" onclick="flyTo(\''+r.lat+'\',\''+r.lng+'\',\''+sn+'\')">'
-      +'<div class="search-item-name">'+(r.name||"")+'</div>'
-      +'<div class="search-item-sub">'+(r.city||"")+", "+(r.country||"")+'</div></div>';
+      +'<div class="search-item-name">'+safeText(r.name)+'</div>'
+      +'<div class="search-item-sub">'+safeText(r.city)+", "+safeText(r.country)+'</div></div>';
   }).join("");
   box.style.display="block";
 }
@@ -438,7 +504,7 @@ function renderTable(){
   body.innerHTML=tableData.slice(0,500).map(function(row,i){
     return"<tr><td style='padding:4px 8px;text-align:center'><input type='checkbox' class='row-check' data-i='"+i+"'></td>"
       +columns.map(function(c){
-        return"<td><input value='"+(row[c]||"").replace(/'/g,"&#39;").replace(/"/g,"&quot;")
+        return"<td><input value='"+safeText(row[c]).replace(/'/g,"&#39;").replace(/"/g,"&quot;")
           +"' onchange=\"updateCell("+i+",\'"+c+"\',this.value)\" placeholder='"+(COL_LABELS[c]||c)+"'></td>";
       }).join("")
       +"<td class='td-del'><button onclick='deleteRow("+i+")'>🗑</button></td></tr>";
@@ -446,11 +512,7 @@ function renderTable(){
   document.getElementById("drop-zone").style.display="none";
   var wrap=document.getElementById("table-wrap");
   var note=wrap.querySelector("p");
-  if(!note){
-    note=document.createElement("p");
-    note.style.cssText="padding:10px 16px;font-size:12px;color:rgba(200,220,255,0.4)";
-    wrap.appendChild(note);
-  }
+  if(!note){note=document.createElement("p");note.style.cssText="padding:10px 16px;font-size:12px;color:rgba(200,220,255,0.4)";wrap.appendChild(note);}
   note.textContent="Zobrazeno prvních 500 z "+tableData.length+" záznamů.";
 }
 function updateCell(i,col,val){tableData[i][col]=val;saveData();rebuildGeoPoints(false);}
@@ -459,10 +521,7 @@ function addRow(){
   saveData();renderTable();
   setTimeout(function(){document.getElementById("table-wrap").scrollTop=99999;},50);
 }
-function deleteRow(i){
-  if(!confirm("Smazat řádek?"))return;
-  tableData.splice(i,1);saveData();renderTable();rebuildGeoPoints(false);
-}
+function deleteRow(i){if(!confirm("Smazat řádek?"))return;tableData.splice(i,1);saveData();renderTable();rebuildGeoPoints(false);}
 function deleteSelected(){
   var checked=[].slice.call(document.querySelectorAll(".row-check:checked")).map(function(el){return parseInt(el.dataset.i);});
   if(!checked.length){alert("Označ řádky.");return;}
